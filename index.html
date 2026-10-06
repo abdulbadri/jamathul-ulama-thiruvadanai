@@ -1284,6 +1284,29 @@ function renderPublicAnnouncements(){
  renderAnnouncementBlock("news",".announcementDynamicWrap",newsItems,currentLang==="ta"?"அறிவிப்புகள்":"Announcements","OFFICIAL UPDATES");
  renderAnnouncementBlock("activities",".programDynamicWrap",programItems,currentLang==="ta"?"வரவிருக்கும் நிகழ்ச்சிகள்":"Upcoming Programs","WHAT'S NEXT");
 }
+// Shares text plus (when the device/browser supports it) the actual photo file.
+// Falls back to a WhatsApp text-only link when native file-sharing isn't available.
+async function shareWithPhoto(text,imageUrl){
+  try{
+    if(imageUrl&&navigator.share&&navigator.canShare){
+      const res=await fetch(imageUrl);
+      const blob=await res.blob();
+      const file=new File([blob],"photo.jpg",{type:blob.type||"image/jpeg"});
+      if(navigator.canShare({files:[file]})){
+        await navigator.share({text,files:[file]});
+        return;
+      }
+    }
+    if(navigator.share){
+      await navigator.share({text});
+      return;
+    }
+  }catch(e){
+    if(e && e.name==="AbortError")return; // user cancelled the native share sheet
+    console.error("Native share failed, falling back to WhatsApp link:",e);
+  }
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`,"_blank");
+}
 function shareAnnouncement(id){
   const a=announcements.find(x=>String(x.id)===String(id));
   if(!a)return;
@@ -1292,7 +1315,14 @@ function shareAnnouncement(id){
   const sectionAnchor=a.type==="program"?"activities":"news";
   const link=`${location.origin}${location.pathname}#${sectionAnchor}`;
   const text=`*${title}*\n\n${body}\n\n${link}`;
-  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`,"_blank");
+  shareWithPhoto(text,a.imageUrl);
+}
+function shareGalleryPhoto(id){
+  const p=galleryPhotos.find(x=>String(x.id)===String(id));
+  if(!p)return;
+  const link=`${location.origin}${location.pathname}#gallery`;
+  const text=p.caption?`*${p.caption}*\n\n${link}`:link;
+  shareWithPhoto(text,p.url);
 }
 function renderAnnouncementBlock(sectionId,wrapSelector,items,title,eyebrow){
  const box=document.getElementById(sectionId); if(!box)return;
@@ -1441,7 +1471,7 @@ function renderPublicGallery(){
     box.innerHTML=`<div class="card" style="height:170px;display:grid;place-items:center">📷<br>${currentLang==="ta"?"படங்கள் விரைவில்":"Photos coming soon"}</div>`;
     return;
   }
-  box.innerHTML=galleryPhotos.map(p=>`<div class="card" style="padding:0;overflow:hidden;height:${p.caption?"228px":"190px"}"><img src="${esc(p.url)}" alt="${esc(p.caption||"Photo")}" style="width:100%;height:190px;object-fit:cover;display:block">${p.caption?`<div style="padding:8px 10px;font-size:13px;color:var(--muted)">${esc(p.caption)}</div>`:""}</div>`).join("");
+  box.innerHTML=galleryPhotos.map(p=>`<div class="card" style="padding:0;overflow:hidden"><img src="${esc(p.url)}" alt="${esc(p.caption||"Photo")}" style="width:100%;height:190px;object-fit:cover;display:block">${p.caption?`<div style="padding:8px 10px 2px;font-size:13px;color:var(--muted)">${esc(p.caption)}</div>`:""}<div style="padding:8px 10px 10px"><button type="button" class="smallBtn" style="background:#e9f8ee;color:#128c3e" onclick="shareGalleryPhoto('${esc(p.id)}')">📲 Share on WhatsApp</button></div></div>`).join("");
 }
 function populateBulkTownFilter(){const sel=document.getElementById("bulkTown");if(!sel)return;const cur=sel.value;const towns=[...new Set(members.map(m=>memberTown(m)||"Town not detected").filter(Boolean))].sort((a,b)=>a.localeCompare(b));sel.innerHTML='<option value="">All Towns / Localities</option>'+towns.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("");sel.value=cur}
 function bulkMemberStatus(m){const currentYear=String(new Date().getFullYear());const rec=subscriptions.find(s=>String(s.memberId)===String(m.id)&&String(s.year)===currentYear);return rec?(rec.status||"Pending"):"No Record"}
